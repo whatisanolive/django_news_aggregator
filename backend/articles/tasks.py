@@ -6,7 +6,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from articles.models import Article
-from articles.services import scrape_article_content, summarize_article_content
+from articles.services import scrape_article_content, summarize_article_content, analyze_sentiment
 from sources.models import Source
 
 logger = logging.getLogger(__name__)
@@ -110,12 +110,18 @@ def scrape_and_summarize_article(article_id):
             content=article.content,
             fallback_text=article.rss_excerpt,
         )
+        sentiment_data = analyze_sentiment(
+            content=article.content,
+            fallback_text=article.rss_excerpt,
+        )
         article.summary = summary
+        article.sentiment_score = sentiment_data["score"]
+        article.sentiment_label = sentiment_data["label"]
         article.summary_status = Article.SummaryStatus.COMPLETED
         article.summary_error = ""
         article.summarized_at = timezone.now()
     except Exception as exc:
-        logger.exception("Failed to summarize article %s", article.id)
+        logger.exception("Failed to summarize or analyze sentiment for article %s", article.id)
         article.summary = article.rss_excerpt[:500]
         article.summary_status = Article.SummaryStatus.FAILED
         article.summary_error = str(exc)
@@ -124,6 +130,8 @@ def scrape_and_summarize_article(article_id):
         update_fields=[
             "content",
             "summary",
+            "sentiment_score",
+            "sentiment_label",
             "summary_status",
             "summary_error",
             "scraped_at",

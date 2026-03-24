@@ -87,46 +87,56 @@ def scrape_article_content(url, fallback_text=""):
     }
 
 
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lsa import LsaSummarizer
+from sumy.utils import get_stop_words
+from textblob import TextBlob
+import nltk
+
+def _ensure_nltk_data():
+    try:
+        nltk.data.find('tokenizers/punkt_tab')
+    except LookupError:
+        nltk.download('punkt_tab')
+
 def summarize_article_content(title, source_name, category, content, fallback_text=""):
-    api_key = settings.GEMINI_API_KEY
-    if not api_key:
-        text = fallback_text or content
-        return text[:280] if text else "Summary unavailable until GEMINI_API_KEY is configured."
+    text = content or fallback_text
+    if not text:
+        return "No content available to summarize."
 
-    prompt = (
-        "You are summarizing a news article for a niche aggregator focused on business "
-        "and technology. Write a concise 3-4 sentence summary in plain English. "
-        "Avoid hype, avoid bullet points, mention the key development and why it matters.\n\n"
-        f"Category: {category}\n"
-        f"Source: {source_name}\n"
-        f"Title: {title}\n\n"
-        f"Article:\n{content[: settings.ARTICLE_SUMMARY_MAX_CHARS]}"
-    )
+    try:
+        _ensure_nltk_data()
+        parser = PlaintextParser.from_string(text, Tokenizer("english"))
+        summarizer = LsaSummarizer()
+        summarizer.stop_words = get_stop_words("english")
+        
+        summary_sentences = summarizer(parser.document, 4)
+        summary = " ".join([str(sentence) for sentence in summary_sentences])
+        
+        if len(summary) < 20:
+            return text[:280] + "..."
+            
+        return summary
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Summarization failed: %s", e)
+        return text[:280] + "..."
 
-    response = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent",
-        params={"key": api_key},
-        timeout=settings.ARTICLE_FETCH_TIMEOUT,
-        json={
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": prompt,
-                        }
-                    ]
-                }
-            ]
-        },
-    )
-    response.raise_for_status()
-    data = response.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
-        raise ValueError("Gemini returned no summary candidates.")
 
-    parts = candidates[0].get("content", {}).get("parts", [])
-    summary = "\n".join(part.get("text", "").strip() for part in parts if part.get("text")).strip()
-    if not summary:
-        raise ValueError("Gemini response did not include summary text.")
-    return summary
+def analyze_sentiment(content, fallback_text=""):
+    text = content or fallback_text
+    if not text:
+        return {"score": 0.0, "label": "Neutral"}
+        
+    blob = TextBlob(text)
+    score = blob.sentiment.polarity
+    
+    if score > 0.1:
+        label = "Positive"
+    elif score < -0.1:
+        label = "Negative"
+    else:
+        label = "Neutral"
+        
+    return {"score": score, "label": label}

@@ -27,3 +27,8 @@ six==1.17.0
 sqlparse==0.5.5
 urllib3==2.6.3
 uv==0.10.7
+
+sumy==0.11.0
+textblob==0.18.0.post0
+
+numpy

@@ -13,6 +13,8 @@ class Article(models.Model):
     rss_excerpt = models.TextField(blank=True)
     content = models.TextField(blank=True)
     summary = models.TextField(blank=True)
+    sentiment_score = models.FloatField(null=True, blank=True)
+    sentiment_label = models.CharField(max_length=20, blank=True)
     source = models.ForeignKey(
         Source,
         on_delete=models.CASCADE,
@@ -37,8 +39,17 @@ class Article(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        if self.source_id:
+            self.category = self.source.category
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["-published_at"]
+        indexes = [
+        models.Index(fields=["published_at"]),
+        models.Index(fields=["summary_status"]),
+        ]
         
 
     def __str__(self):
