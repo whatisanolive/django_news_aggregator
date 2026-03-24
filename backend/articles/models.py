@@ -1,4 +1,7 @@
 from django.db import models
+from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from sources.models import Source
 
 class Article(models.Model):
@@ -38,6 +41,7 @@ class Article(models.Model):
     summarized_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    votes = GenericRelation('Vote')
 
     def save(self, *args, **kwargs):
         if self.source_id:
@@ -54,3 +58,28 @@ class Article(models.Model):
 
     def __str__(self):
         return self.title
+
+class Vote(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    value = models.SmallIntegerField()
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'content_type', 'object_id'], name='unique_user_vote')
+        ]
+
+class Comment(models.Model):
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    content = models.TextField()
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='replies')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    votes = GenericRelation(Vote)
+
+    def __str__(self):
+        return f"Comment by {self.user.username} on {self.article.title}"

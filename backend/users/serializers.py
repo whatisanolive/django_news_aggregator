@@ -14,6 +14,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    profile_pic = serializers.CharField(source='profile.profile_pic', read_only=True)
+
     class Meta:
         model = User
-        fields = ["id", "username", "email"]
+        fields = ["id", "username", "email", "profile_pic"]
